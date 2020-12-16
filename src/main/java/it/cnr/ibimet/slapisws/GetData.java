@@ -44,7 +44,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -105,11 +105,174 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"stat_"+id_station+".json\"");
 
 
         return responseBuilder.build();
     }
-	
+
+
+    /**
+     * Get hydro station list + metadata
+     *
+     *
+     * @return
+     */
+    @GET
+    @Path("/j_get_stations_data/json/{id_station}/{stat_name}/{year}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response get_station_data(@PathParam("id_station") String id_station,
+                                     @PathParam("stat_name") String stat_name,
+                                     @PathParam("year") String year) {
+
+        TDBManager tdb=null;
+        String retData="";
+
+        try {
+            SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
+            SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
+            tdb = new TDBManager("jdbc/ssdb");
+            String sqlString=null;
+
+            sqlString="select date_out, depth_out,q_out "
+                    + "from postgis.observed_data("+year+","+id_station+")";
+
+            System.out.println("J_GET_STATIONS_DATA - SQL: "+sqlString);
+
+            tdb.setPreparedStatementRef(sqlString);
+
+            tdb.runPreparedQuery();
+
+
+            JSONArray jArray= new JSONArray();
+
+            while(tdb.next()){
+
+                JSONObject jobj = new JSONObject();
+                jobj.put("date", formatter.format(tdb.getData(1).getTime()));
+
+                jobj.put("hour", formatter2.format(tdb.getData(1).getTime()));
+
+                jobj.put("depth", tdb.getDouble(2));
+                jobj.put("Q", tdb.getDouble(3));
+
+
+                jArray.add(jobj);
+            }
+
+            retData = jArray.toJSONString();
+
+
+
+
+
+
+
+        }catch(Exception e){
+            System.out.println("Error  : "+e.getMessage());
+
+
+            try{
+                tdb.closeConnection();
+            }catch (Exception ee){
+                System.out.println("Error "+ee.getMessage());
+            }
+
+            return Response.status(500).entity(e.getMessage()).build();
+        }finally {
+
+            try{
+                tdb.closeConnection();
+            }catch (Exception ee){
+                System.out.println("Error "+ee.getMessage());
+            }
+
+        }
+
+
+        Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\""+stat_name+".json\"");
+
+
+        return responseBuilder.build();
+    }
+
+    /**
+     * Get hydro station list + metadata
+     *
+     *
+     * @return
+     */
+    @GET
+    @Path("/j_get_stations_data/csv/{id_station}/{stat_name}/{year}")
+    @Produces(MediaType.TEXT_PLAIN)
+    public Response get_station_data_csv(@PathParam("id_station") String id_station,
+                                     @PathParam("stat_name") String stat_name,
+                                     @PathParam("year") String year) {
+
+        TDBManager tdb=null;
+        String retData="";
+
+        try {
+            SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
+            SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
+            tdb = new TDBManager("jdbc/ssdb");
+            String sqlString=null;
+
+            sqlString="select date_out, depth_out,q_out "
+                    + "from postgis.observed_data("+year+","+id_station+")";
+
+            System.out.println("J_GET_STATIONS_DATA - SQL: "+sqlString);
+
+            tdb.setPreparedStatementRef(sqlString);
+
+            tdb.runPreparedQuery();
+
+            retData = "date, hour, depth, Q \n";
+
+            while(tdb.next()){
+
+
+                retData = retData + "" +formatter.format(tdb.getData(1).getTime()) +","
+                        + formatter2.format(tdb.getData(1).getTime()) + ","
+                        +tdb.getDouble(2) + "," + tdb.getDouble(3) + "\n";
+
+            }
+
+
+
+
+
+
+
+        }catch(Exception e){
+            System.out.println("Error  : "+e.getMessage());
+
+
+            try{
+                tdb.closeConnection();
+            }catch (Exception ee){
+                System.out.println("Error "+ee.getMessage());
+            }
+
+            return Response.status(500).entity(e.getMessage()).build();
+        }finally {
+
+            try{
+                tdb.closeConnection();
+            }catch (Exception ee){
+                System.out.println("Error "+ee.getMessage());
+            }
+
+        }
+
+
+        Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\""+stat_name+".csv\"");
+
+
+        return responseBuilder.build();
+    }
 
     @GET
     @Path("/j_get_stations_alldata/{id_station}")
@@ -121,7 +284,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -182,12 +345,174 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"stat_"+id_station+".json\"");
 
 
         return responseBuilder.build();
     }
-    
-    
+
+
+    @GET
+    @Path("/j_get_optimized_glofas/{id_station}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response get_opt_glofas_data(@PathParam("id_station") String id_station) {
+
+        TDBManager tdb=null;
+        String retData="";
+
+        try {
+            SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
+            SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
+            tdb = new TDBManager("jdbc/ssdb");
+            String sqlString=null;
+
+            sqlString="select * from postgis.optimize_glofas_flat("+id_station+") ORDER BY dtime_out desc ";
+
+            System.out.println("J_GET_STATIONS_DATA - SQL: "+sqlString);
+
+            tdb.setPreparedStatementRef(sqlString);
+
+            tdb.runPreparedQuery();
+
+
+            JSONArray jArray= new JSONArray();
+
+            while(tdb.next()){
+
+                JSONObject jobj = new JSONObject();
+                jobj.put("date", formatter.format(tdb.getData(1).getTime()));
+
+                jobj.put("hour", formatter2.format(tdb.getData(1).getTime()));
+
+                jobj.put("d1", tdb.getDouble(2));
+                jobj.put("d2", tdb.getDouble(3));
+                jobj.put("d3", tdb.getDouble(4));
+                jobj.put("d4", tdb.getDouble(5));
+                jobj.put("d5", tdb.getDouble(6));
+                jobj.put("d6", tdb.getDouble(7));
+                jobj.put("d7", tdb.getDouble(8));
+                jobj.put("d8", tdb.getDouble(9));
+                jobj.put("d9", tdb.getDouble(10));
+                jobj.put("d10", tdb.getDouble(11));
+
+
+                jArray.add(jobj);
+            }
+
+            retData = jArray.toJSONString();
+
+
+
+
+
+
+
+        }catch(Exception e){
+            System.out.println("Error  : "+e.getMessage());
+
+
+            try{
+                tdb.closeConnection();
+            }catch (Exception ee){
+                System.out.println("Error "+ee.getMessage());
+            }
+
+            return Response.status(500).entity(e.getMessage()).build();
+        }finally {
+
+            try{
+                tdb.closeConnection();
+            }catch (Exception ee){
+                System.out.println("Error "+ee.getMessage());
+            }
+
+        }
+
+
+        Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"opt_glofas_"+id_station+".json\"");
+
+
+        return responseBuilder.build();
+    }
+
+    @GET
+    @Path("/j_get_optimized_glofas_csv/{id_station}")
+    @Produces(MediaType.TEXT_PLAIN)
+    public Response get_station_opt_glofas_csv(@PathParam("id_station") String id_station) {
+
+        TDBManager tdb=null;
+        String retData="";
+
+
+
+        try {
+            SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
+            SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
+            tdb = new TDBManager("jdbc/ssdb");
+            String sqlString=null;
+
+            sqlString="select * from postgis.optimize_glofas_flat("+id_station+") ORDER BY dtime_out desc ";
+
+            System.out.println("J_GET_STATIONS_DATA - SQL: "+sqlString);
+
+            tdb.setPreparedStatementRef(sqlString);
+
+            tdb.runPreparedQuery();
+
+
+            retData = "date, hour, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10 \n";
+
+            while(tdb.next()){
+
+
+                retData = retData + "" +formatter.format(tdb.getData(1).getTime()) +"," + formatter2.format(tdb.getData(1).getTime()) + ","
+                        +tdb.getDouble(2) + "," + tdb.getDouble(3) +
+                        +tdb.getDouble(4) + "," + tdb.getDouble(5) +
+                        +tdb.getDouble(6) + "," + tdb.getDouble(7) +
+                        +tdb.getDouble(8) + "," + tdb.getDouble(9) +
+                        +tdb.getDouble(10) + "," + tdb.getDouble(11) + "\n";
+
+            }
+
+
+
+
+
+
+
+        }catch(Exception e){
+            System.out.println("Error  : "+e.getMessage());
+
+
+            try{
+                tdb.closeConnection();
+            }catch (Exception ee){
+                System.out.println("Error "+ee.getMessage());
+            }
+
+            return Response.status(500).entity(e.getMessage()).build();
+        }finally {
+
+            try{
+                tdb.closeConnection();
+            }catch (Exception ee){
+                System.out.println("Error "+ee.getMessage());
+            }
+
+        }
+
+
+
+
+        Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"opt_glofas_"+id_station+".csv\"");
+
+
+        return responseBuilder.build();
+    }
+
+
     @GET
     @Path("/j_get_stations_alldata_csv/{id_station}")
     @Produces("text/csv")
@@ -200,7 +525,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -251,7 +576,10 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }
 
 
+
+
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"stat_"+id_station+".csv\"");
 
 
         return responseBuilder.build();
@@ -267,7 +595,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -358,6 +686,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"glofas_"+id_station+".json\"");
 
 
         return responseBuilder.build();
@@ -374,7 +703,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -445,6 +774,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"niger_hype_"+id_station+".json\"");
 
 
         return responseBuilder.build();
@@ -464,7 +794,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -538,6 +868,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
 
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"niger_hype_"+id_station+".json\"");
 
         return responseBuilder.build();
     }
@@ -552,7 +883,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -612,6 +943,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"glofas_"+id_station+".csv\"");
 
 
         return responseBuilder.build();
@@ -628,7 +960,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         boolean first;
         try {
             SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-            SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+            SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             tdb2 = new TDBManager("jdbc/ssdb");
             String sqlString=null;
@@ -710,6 +1042,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
 
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"glofas_"+id_station+".csv\"");
 
         return responseBuilder.build();
     }
@@ -725,7 +1058,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         boolean first;
         try {
             SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-            SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+            SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             tdb2 = new TDBManager("jdbc/ssdb");
             String sqlString=null;
@@ -806,6 +1139,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"wh_"+subbasin+"_"+year+".csv\"");
 
 
         return responseBuilder.build();
@@ -814,7 +1148,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
     @GET
     @Path("/j_get_niger_hyp_rawdata_csv/{id_station}")
-    @Produces(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.TEXT_PLAIN)
     public Response get_niger_hyp_rawdata_csv(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
@@ -822,7 +1156,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -880,6 +1214,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"wh_"+id_station+".csv\"");
 
 
         return responseBuilder.build();
@@ -888,7 +1223,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     
     @GET
     @Path("/j_get_niger_hyp_rawdata_csv/{id_station}/{year}/{month}/{day}")
-    @Produces(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.TEXT_PLAIN)
     public Response get_niger_hyp_rawdata_csv(@PathParam("id_station") String id_station,
     		@PathParam("year") String year,
     		@PathParam("month") String month,
@@ -899,7 +1234,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -960,6 +1295,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
 
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"niger_hype_"+id_station+"_"+year+".csv\"");
 
         return responseBuilder.build();
     }
@@ -976,7 +1312,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -1047,6 +1383,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"wh_"+id_station+".json\"");
 
 
         return responseBuilder.build();
@@ -1065,7 +1402,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -1138,6 +1475,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"wh_"+id_station+"_"+year+"_"+month+"_"+day+".json\"");
 
 
         return responseBuilder.build();
@@ -1154,7 +1492,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -1212,6 +1550,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"wh_"+id_station+".json\"");
 
 
         return responseBuilder.build();
@@ -1220,7 +1559,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     
     @GET
     @Path("/j_get_world_hype_rawdata_csv/{id_station}/{year}/{month}/{day}")
-    @Produces(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.TEXT_PLAIN)
     public Response get_world_hype_rawdata_csv(@PathParam("id_station") String id_station,
     		@PathParam("year") String year,
     		@PathParam("month") String month,
@@ -1231,7 +1570,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
-        	SimpleDateFormat formatter2=new SimpleDateFormat("hh:mm");
+        	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             String sqlString=null;
 
@@ -1291,6 +1630,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
+        responseBuilder.header("Content-Disposition", "attachment; filename=\"wh_"+id_station+"_"+year+"_"+month+"_"+day+".csv\"");
 
 
         return responseBuilder.build();
