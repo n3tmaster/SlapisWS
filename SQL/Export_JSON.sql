@@ -12,7 +12,7 @@ from (
     from (
         select
             'Feature' as "type",
-            ST_AsGeoJSON(the_geom, 6) :: json as "geometry",
+            postgis.ST_AsGeoJSON(the_geom, 6) :: json as "geometry",
             (
                 select json_strip_nulls(row_to_json(t))
                 from (
@@ -32,7 +32,40 @@ END;
 $$
 language 'plpgsql';
 
+create or replace function postgis.export_stations(basin_in varchar)
+    RETURNS text AS
+$$
+DECLARE
+    geojson_out text;
+BEGIN
+    select row_to_json(fc) INTO geojson_out
+    from (
+             select
+                 'FeatureCollection' as "type",
+                 array_to_json(array_agg(f)) as "features"
+             from (
+                      select
+                          'Feature' as "type",
+                          postgis.ST_AsGeoJSON(the_geom, 6) :: json as "geometry",
+                          (
+                              select json_strip_nulls(row_to_json(t))
+                              from (
+                                       select
+                                           _id_station,
+                                           stat_name,
+                                           basin
+                                   ) t
+                          ) as "properties"
+                      from postgis.stations
+                      where riviere = basin_in
 
+                  ) as f
+         ) as fc;
+
+    return(geojson_out);
+END;
+$$
+    language 'plpgsql';
 
 create or replace function postgis.export_all_scenarios()
 RETURNS text AS
@@ -48,12 +81,12 @@ from (
     from (
         select
             'Feature' as "type",
-            ST_AsGeoJSON(the_geom, 6) :: json as "geometry",
+            postgis.ST_AsGeoJSON(the_geom, 6) :: json as "geometry",
             (
                 select json_strip_nulls(row_to_json(t))
                 from (
                     select
-                        ST_Area(the_geom),
+                        postgis.ST_Area(the_geom),
                         basin_lvl
                 ) t
             ) as "properties"
@@ -82,12 +115,12 @@ from (
     from (
         select
             'Feature' as "type",
-            ST_AsGeoJSON(the_geom, 6) :: json as "geometry",
+            postgis.ST_AsGeoJSON(the_geom, 6) :: json as "geometry",
             (
                 select json_strip_nulls(row_to_json(t))
                 from (
                     select
-                        ST_Area(the_geom),
+                        postgis.ST_Area(the_geom),
                         basin_lvl
                 ) t
             ) as "properties"
@@ -791,24 +824,14 @@ END;
 $BODY$;
 
 
--- FUNCTION: postgis.optimize_glofas(timestamp without time zone, integer)
-
--- DROP FUNCTION postgis.optimize_glofas(timestamp without time zone, integer);
--- New version with algorithms prepared in 2020
--- this version apply the optimization algorithm to all dataset and return it with optimized values
 CREATE OR REPLACE FUNCTION postgis.optimize_glofas_flat(
     _id_station_in integer)
-    RETURNS TABLE(dtime_out timestamp without time zone,
-                  d1_out double precision,d2_out double precision,
-                  d3_out double precision,d4_out double precision,
-                  d5_out double precision,d6_out double precision,
-                  d7_out double precision,d8_out double precision,
-                  d9_out double precision,d10_out double precision)
+    RETURNS TABLE(dtime_out timestamp without time zone, d1_out double precision, d2_out double precision, d3_out double precision, d4_out double precision, d5_out double precision, d6_out double precision, d7_out double precision, d8_out double precision, d9_out double precision, d10_out double precision)
     LANGUAGE 'plpgsql'
-
     COST 100
-    VOLATILE
+    VOLATILE PARALLEL UNSAFE
     ROWS 1000
+
 AS $BODY$
 DECLARE
 
@@ -824,189 +847,182 @@ DECLARE
 BEGIN
     RAISE NOTICE 'Extract GLOFAS raw data';
 
-
     FOR lst_i IN select dtime as this_time
                  from postgis.glofas
                  where _id_station = _id_station_in
                  order by dtime
         LOOP
 
-        dtime_out := lst_i.this_time;
-        FOR icount IN 1..10 LOOP
-                EXECUTE 'SELECT d'||icount||' FROM postgis.glofas WHERE dtime = $1 and _id_station = $2'
-                    INTO d1
-                    USING lst_i.this_time,_id_station_in;
+            dtime_out := lst_i.this_time;
+            FOR icount IN 1..10 LOOP
+                    EXECUTE 'SELECT d'||icount||' FROM postgis.glofas WHERE dtime = $1 and _id_station = $2'
+                        INTO d1
+                        USING lst_i.this_time,_id_station_in;
 
 
-                dcheck := extract(day from dtime_out);
-                mcheck := extract(month from dtime_out);
+                    dcheck := extract(day from dtime_out);
+                    mcheck := extract(month from dtime_out);
 
-                RAISE NOTICE 'Executing % - % for: %',dtime_out, icount, d1;
+                    RAISE NOTICE 'Executing % - % for: %',dtime_out, icount, d1;
 
-                IF mcheck = 6 THEN
+                    IF mcheck = 6 THEN
 
-                    --glofas_out := ((((exp(1.0)^3.0453)*(1+d1)^132.5391)) -1);
+                        --glofas_out := ((((exp(1.0)^3.0453)*(1+d1)^132.5391)) -1);
 
-                    glofas_out := 57.0059570524724 + (21991.2810474194 * d1) + (-519044.596395844 * d1^2.0) + (4452644.13579541 * d1^3.0) + (-12372695.0879734 * d1^4.0);
+                        glofas_out := 50.7396965607313 + (22760.3375903372 * d1) + (-536597.454864388 * d1^2.0) + (4600442.3563923 * d1^3.0) + (-12790337.0876755 * d1^4.0);
 
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 0.0 THEN
+                            glofas_out := 0.0;
+                        END IF;
 
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 0.0 THEN
-                        glofas_out := 0.0;
+                    ELSIF mcheck = 7 AND dcheck <= 10 THEN
+
+                        -- glofas_out := 119.6083 + (135470 * d1) + ( -14993000*d1^2.0);
+
+                        glofas_out := 120.914199103894 + (41690.532745796 * d1) + ( -1091111.77287596 * d1^2.0) + (1742750.54789365 * d1^3.0);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 7.0 THEN
+                            glofas_out := 7.0;
+                        END IF;
+
+                    ELSIF mcheck = 7 AND dcheck <= 20 AND dcheck > 10 THEN
+                        -- glofas_out := 220.0813 + (234.5152 * d1);
+
+                        glofas_out := 221.286479764917 + (-302.309563756072 * d1); -- + (12470.5614105203 * d1^2.0);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 7.0 THEN
+                            glofas_out := 7.0;
+                        END IF;
+
+                    ELSIF mcheck = 7 AND dcheck <= 31 AND dcheck > 20 THEN
+                        -- glofas_out := (749.5309 * d1) + (-298.9367 * d1^2.0) + (29.3423 * d1)^3.0 + (-0.7941 * d1^4.0);
+                        glofas_out := 322.330328149235 + (98.2758186708467 * d1);
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 7.0 THEN
+                            glofas_out := 7.0;
+                        END IF;
+                    ELSIF mcheck = 8 AND dcheck <= 10 THEN
+
+                        --glofas_out := 459.0704 + (-1139.1 * d1) + (2435.6 * d1)^2.0 + (-1510.9 * d1^3.0) + (357.6878 * d1)^4.0 + (-28.0248 * d1^5.0);
+                        glofas_out := 428.636835992146 + (687.652427695908 * d1) + (-180.008196668703 * d1^2.0) + (12.7989008976481 * d1^3.0) + (-0.273873196326212 * d1^4.0);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 120.0 THEN
+                            glofas_out := 120.0;
+                        END IF;
+                    ELSIF mcheck = 8 AND dcheck <= 20 AND dcheck > 10 THEN
+
+                        --glofas_out := 350.4166 + (26.1874 * d1) + (-0.3584*d1^2.0);
+                        glofas_out := 356.018800861591 + (94.7693604921143 * d1) + ( -4.91429696550476 * d1^2.0) + (0.0927091403498668 * d1^3.0) + (-0.000582453494537824 * d1^4.0);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 60.0 THEN
+                            glofas_out := 60.0;
+                        END IF;
+
+                    ELSIF mcheck = 8 AND dcheck <= 31 AND dcheck > 20 THEN
+                        --glofas_out := 470.8202 + (5.4112 * d1);
+                        glofas_out := 450.647835610469 + (14.3400216442891 * d1) + (-0.125812447286298 * d1^2.0); -- + (-0.101482158839039 * d1^3.0) + (0.000521691259383321 * d1^4.0);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 150.0 THEN
+                            glofas_out := 150.0;
+                        END IF;
+
+                    ELSIF mcheck = 9 AND dcheck <= 10 THEN
+
+                        --glofas_out :=((((exp(1.0)^5.7298)*(1+d1)^0.1463)) -1);
+                        glofas_out := 429.896337933841 + (8.13490580107346 * d1) + (-0.0411663605258606 * d1^2);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 150.0 THEN
+                            glofas_out := 150.0;
+                        END IF;
+                    ELSIF mcheck = 9 AND dcheck <= 20 AND dcheck > 10 THEN
+
+                        --glofas_out := 210.1604 + (4.8564 * d1) + (-0.0127*d1^2.0);
+                        glofas_out := 251.224074308337 + (7.26328204249139 * d1) + (-0.0269484938930255 * d1^2.0);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 150.0 THEN
+                            glofas_out := 150.0;
+                        END IF;
+
+                    ELSIF mcheck = 9 AND dcheck <= 30 AND dcheck > 20 THEN
+
+                        --glofas_out := ((((exp(1.0)^3.5805)*(1+d1)^0.4432)) -1);
+                        glofas_out := 147.206288449766 + (1.39751077055147 * d1);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 50.0 THEN
+                            glofas_out := 50.0;
+                        END IF;
+                    ELSIF mcheck = 10 THEN
+
+                        --glofas_out := (0.9664 * d1);
+                        glofas_out := 0.765786797838467 + (0.614425139921291 * d1);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 0.0 THEN
+                            glofas_out := 0.0;
+                        END IF;
+                    ELSIF mcheck = 11 OR mcheck = 12 OR (mcheck >= 1 AND mcheck <= 5) THEN
+
+                        glofas_out := (d1);
+
+                        IF glofas_out > 2400.0 THEN
+                            glofas_out := 2400.0;
+                        ELSIF glofas_out < 0.0 THEN
+                            glofas_out := 0.0;
+                        END IF;
                     END IF;
 
-                ELSIF mcheck = 7 AND dcheck <= 10 THEN
+                    CASE icount
+                        WHEN 1 THEN
+                            d1_out := glofas_out;
+                        WHEN 2 THEN
+                            d2_out := glofas_out;
+                        WHEN 3 THEN
+                            d3_out := glofas_out;
+                        WHEN 4 THEN
+                            d4_out := glofas_out;
+                        WHEN 5 THEN
+                            d5_out := glofas_out;
+                        WHEN 6 THEN
+                            d6_out := glofas_out;
+                        WHEN 7 THEN
+                            d7_out := glofas_out;
+                        WHEN 8 THEN
+                            d8_out := glofas_out;
+                        WHEN 9 THEN
+                            d9_out := glofas_out;
+                        WHEN 10 THEN
+                            d10_out := glofas_out;
+                        END CASE;
 
-                    -- glofas_out := 119.6083 + (135470 * d1) + ( -14993000*d1^2.0);
-
-                    glofas_out := 133.893186567601 + (41711.0377936412 * d1) + ( -1094076.56095041 * d1^2.0) + (1747770.07564359 * d1^3.0);
-
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 7.0 THEN
-                        glofas_out := 7.0;
-                    END IF;
-
-                ELSIF mcheck = 7 AND dcheck <= 20 AND dcheck > 10 THEN
-                    -- glofas_out := 220.0813 + (234.5152 * d1);
-
-                    glofas_out := 232.087608358047 + (-4662.08382478494 * d1) + (12470.5614105203 * d1^2.0);
-
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 7.0 THEN
-                        glofas_out := 7.0;
-                    END IF;
-
-                ELSIF mcheck = 7 AND dcheck <= 31 AND dcheck > 20 THEN
-                    -- glofas_out := (749.5309 * d1) + (-298.9367 * d1^2.0) + (29.3423 * d1)^3.0 + (-0.7941 * d1^4.0);
-                    glofas_out := 273.247971831548 + (182.320964961982 * d1);
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 7.0 THEN
-                        glofas_out := 7.0;
-                    END IF;
-                ELSIF mcheck = 8 AND dcheck <= 10 THEN
-
-                    --glofas_out := 459.0704 + (-1139.1 * d1) + (2435.6 * d1)^2.0 + (-1510.9 * d1^3.0) + (357.6878 * d1)^4.0 + (-28.0248 * d1^5.0);
-                    glofas_out := 440.093949582358 + (528.311981614102 * d1);
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 120.0 THEN
-                        glofas_out := 120.0;
-                    END IF;
-                ELSIF mcheck = 8 AND dcheck <= 20 AND dcheck > 10 THEN
-
-                    --glofas_out := 350.4166 + (26.1874 * d1) + (-0.3584*d1^2.0);
-                    glofas_out := 373.188056030643 + (63.0608867770593 * d1) + ( -1.97892159194577 * d1^2.0) + (0.0155655674493522 * d1^3.0);
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 60.0 THEN
-                        glofas_out := 60.0;
-                    END IF;
-
-                ELSIF mcheck = 8 AND dcheck <= 31 AND dcheck > 20 THEN
-                    --glofas_out := 470.8202 + (5.4112 * d1);
-                    glofas_out := 486.107525272311 + (-74.53060190522 * d1) + (5.40738155580814 * d1^2.0) + (-0.101482158839039 * d1^3.0) + (0.000521691259383321 * d1^4.0);
-
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 150.0 THEN
-                        glofas_out := 150.0;
-                    END IF;
-
-                ELSIF mcheck = 9 AND dcheck <= 10 THEN
-
-                    --glofas_out :=((((exp(1.0)^5.7298)*(1+d1)^0.1463)) -1);
-                    glofas_out := 476.465293894257 + (1.30199472149463 * d1);
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 150.0 THEN
-                        glofas_out := 150.0;
-                    END IF;
-                ELSIF mcheck = 9 AND dcheck <= 20 AND dcheck > 10 THEN
-
-                    --glofas_out := 210.1604 + (4.8564 * d1) + (-0.0127*d1^2.0);
-                    glofas_out := 282.576681392244 + (4.57846436510914 * d1) + (-0.0150832457296455 * d1^2.0);
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 150.0 THEN
-                        glofas_out := 150.0;
-                    END IF;
-
-                ELSIF mcheck = 9 AND dcheck <= 30 AND dcheck > 20 THEN
-
-                    --glofas_out := ((((exp(1.0)^3.5805)*(1+d1)^0.4432)) -1);
-                    glofas_out := 153.764155488631 + (1.19180068046191 * d1);
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 50.0 THEN
-                        glofas_out := 50.0;
-                    END IF;
-                ELSIF mcheck = 10 THEN
-
-                    --glofas_out := (0.9664 * d1);
-                    glofas_out := 2.32840382649726 + (0.618734592230589 * d1);
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 0.0 THEN
-                        glofas_out := 0.0;
-                    END IF;
-                ELSIF mcheck = 11 OR mcheck = 12 OR (mcheck >= 1 AND mcheck <= 5) THEN
-
-                    glofas_out := (d1);
-
-                    IF glofas_out > 2400.0 THEN
-                        glofas_out := 2400.0;
-                    ELSIF glofas_out < 0.0 THEN
-                        glofas_out := 0.0;
-                    END IF;
-                END IF;
-
-
-                CASE icount
-                    WHEN 1 THEN
-                        d1_out := glofas_out;
-                    WHEN 2 THEN
-                        d2_out := glofas_out;
-                    WHEN 3 THEN
-                        d3_out := glofas_out;
-                    WHEN 4 THEN
-                        d4_out := glofas_out;
-                    WHEN 5 THEN
-                        d5_out := glofas_out;
-                    WHEN 6 THEN
-                        d6_out := glofas_out;
-                    WHEN 7 THEN
-                        d7_out := glofas_out;
-                    WHEN 8 THEN
-                        d8_out := glofas_out;
-                    WHEN 9 THEN
-                        d9_out := glofas_out;
-                    WHEN 10 THEN
-                        d10_out := glofas_out;
-                END CASE;
-
-
-            END LOOP;
+                END LOOP;
 
             RETURN NEXT;
         END LOOP;
 
-
-
 END;
 $BODY$;
+
+
 CREATE OR REPLACE FUNCTION postgis.analysis1(
     dtime_start timestamp without time zone,
     dtime_end timestamp without time zone,
@@ -1172,6 +1188,7 @@ $BODY$;
 
 --  extract_observed_data
 --  this version will extract data of given station and year
+--  Version 2 - with new coeff management
 --  INPUT
 --   year_in
 --   id_station_in
@@ -1180,25 +1197,22 @@ $BODY$;
 --   depth_out
 --   battery_out
 --   q_out
-CREATE OR REPLACE FUNCTION postgis.extract_observed_data(
+CREATE OR REPLACE FUNCTION postgis.observed_data(
     year_in integer,
     id_station_in integer)
-    RETURNS TABLE(date_out timestamp without time zone,
-                  depth_out double precision,
-                  battery_out double precision,
-                  q_out double precision)
+    RETURNS TABLE(date_out timestamp without time zone, depth_out double precision, q_out double precision)
     LANGUAGE 'plpgsql'
-
     COST 100
-    IMMUTABLE
+    IMMUTABLE PARALLEL UNSAFE
     ROWS 1000
+
 AS $BODY$
 DECLARE
 
     record_out RECORD;
     coef_a_calc double precision;
     coef_b_calc double precision;
-
+    h0_calc double precision;
     dtime1 varchar;
     dtime2 varchar;
 BEGIN
@@ -1207,10 +1221,11 @@ BEGIN
     dtime2 := current_date;
     FOR record_out IN
         with data_ok as (
-            select date_trunc('hour',dtime) as dtime , depth  ,battery
+            select date_trunc('hour',dtime) as dtime , depth
             FROM postgis.station_data
             WHERE extract(year from dtime) = year_in
               AND _id_station = id_station_in
+              AND postgis.check_out_of_range(extract(doy from dtime)::integer,depth,id_station_in)
         ), data_null as (
             select generate_series(
                            dtime1::timestamp,
@@ -1218,18 +1233,18 @@ BEGIN
                            '1 hour'::interval
                        ) as dtime_null
         )
-        SELECT dtime as date, depth as depth, battery as battery
+        SELECT dtime as date, depth as depth
         FROM data_ok
         UNION
-        SELECT dtime_null as date, null, null
+        SELECT dtime_null as date, null
         FROM data_null
         WHERE dtime_null not in (select dtime from data_ok)
           and (select count(*) from data_ok) > 0
+          and extract(year from dtime_null) = year_in
         ORDER BY date DESC
         LOOP
 
             date_out := record_out.date;
-            battery_out := record_out.battery;
 
             IF record_out.depth IS NULL THEN
                 RAISE NOTICE 'NULL RECORD, % - %',id_station_in, date_out;
@@ -1243,13 +1258,13 @@ BEGIN
                 depth_out := record_out.depth;
 
                 --checking coefficients
-                SELECT coef_a, coef_b into coef_a_calc , coef_b_calc
+                SELECT coef_a, coef_b, h0 into coef_a_calc , coef_b_calc, h0_calc
                 FROM postgis.thresholds
                 WHERE _id_station = id_station_in
                   AND depth_min <= depth_out
-                  AND depth_max >= depth_out;
+                  AND depth_max > depth_out;
                 --caculate Q
-                q_out := coef_a_calc  * (depth_out / 100) ^ coef_b_calc ;
+                q_out := coef_a_calc  * ((depth_out - h0_calc) / 100) ^ coef_b_calc ;
                 RAISE NOTICE '% - % - % coeff_a: % - coeff_b: % - Q: %',id_station_in, date_out,depth_out,coef_a_calc,coef_b_calc,q_out;
 
             END IF;
@@ -1257,7 +1272,188 @@ BEGIN
             RETURN NEXT;
         END LOOP;
 
+END;
+$BODY$;
+
+
+
+-- FUNCTION: postgis.optimize_glofas(timestamp without time zone, integer)
+
+-- DROP FUNCTION postgis.optimize_glofas(timestamp without time zone, integer);
+-- version for 2021
+CREATE OR REPLACE FUNCTION postgis.optimize_glofas(
+    dtime_in timestamp without time zone,
+    _id_station integer)
+    RETURNS TABLE(dtime_out timestamp without time zone, glofas_out double precision)
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+    ROWS 1000
+
+AS $BODY$
+DECLARE
+
+    d1 double precision;
+    dcheck INT;
+    mcheck INT;
+    icount INT;
+
+
+    numr INT;
+    res character varying;
+
+BEGIN
+    RAISE NOTICE 'Extract GLOFAS raw data';
+
+    dtime_out := dtime_in - interval '1 day';
+    FOR icount IN 1..10 LOOP
+            EXECUTE 'SELECT d'||icount||' FROM postgis.glofas WHERE dtime = $1 and _id_station = $2'
+                INTO d1
+                USING dtime_in,_id_station;
+            dtime_out := dtime_out + interval '1 day';
+
+            dcheck := extract(day from dtime_out);
+            mcheck := extract(month from dtime_out);
+
+            RAISE NOTICE 'Executing % - % for: %',dtime_out, icount, d1;
+
+            IF mcheck = 6 THEN
+
+                --glofas_out := ((((exp(1.0)^3.0453)*(1+d1)^132.5391)) -1);
+
+                glofas_out := 50.7396965607313 + (22760.3375903372 * d1) + (-536597.454864388 * d1^2.0) + (4600442.3563923 * d1^3.0) + (-12790337.0876755 * d1^4.0);
+
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 0.0 THEN
+                    glofas_out := 0.0;
+                END IF;
+
+            ELSIF mcheck = 7 AND dcheck <= 10 THEN
+
+                -- glofas_out := 119.6083 + (135470 * d1) + ( -14993000*d1^2.0);
+
+                glofas_out := 120.914199103894 + (41690.532745796 * d1) + ( -1091111.77287596 * d1^2.0) + (1742750.54789365 * d1^3.0);
+
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 7.0 THEN
+                    glofas_out := 7.0;
+                END IF;
+
+            ELSIF mcheck = 7 AND dcheck <= 20 AND dcheck > 10 THEN
+                -- glofas_out := 220.0813 + (234.5152 * d1);
+
+                glofas_out := 221.286479764917 + (-302.309563756072 * d1); -- + (12470.5614105203 * d1^2.0);
+
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 7.0 THEN
+                    glofas_out := 7.0;
+                END IF;
+
+            ELSIF mcheck = 7 AND dcheck <= 31 AND dcheck > 20 THEN
+                -- glofas_out := (749.5309 * d1) + (-298.9367 * d1^2.0) + (29.3423 * d1)^3.0 + (-0.7941 * d1^4.0);
+                glofas_out := 322.330328149235 + (98.2758186708467 * d1);
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 7.0 THEN
+                    glofas_out := 7.0;
+                END IF;
+            ELSIF mcheck = 8 AND dcheck <= 10 THEN
+
+                --glofas_out := 459.0704 + (-1139.1 * d1) + (2435.6 * d1)^2.0 + (-1510.9 * d1^3.0) + (357.6878 * d1)^4.0 + (-28.0248 * d1^5.0);
+                glofas_out := 428.636835992146 + (687.652427695908 * d1) + (-180.008196668703 * d1^2.0) + (12.7989008976481 * d1^3.0) + (-0.273873196326212 * d1^4.0);
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 120.0 THEN
+                    glofas_out := 120.0;
+                END IF;
+            ELSIF mcheck = 8 AND dcheck <= 20 AND dcheck > 10 THEN
+
+                --glofas_out := 350.4166 + (26.1874 * d1) + (-0.3584*d1^2.0);
+                glofas_out := 356.018800861591 + (94.7693604921143 * d1) + ( -4.91429696550476 * d1^2.0) + (0.0927091403498668 * d1^3.0) + (-0.000582453494537824 * d1^4.0);
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 60.0 THEN
+                    glofas_out := 60.0;
+                END IF;
+
+            ELSIF mcheck = 8 AND dcheck <= 31 AND dcheck > 20 THEN
+                --glofas_out := 470.8202 + (5.4112 * d1);
+                glofas_out := 450.647835610469 + (14.3400216442891 * d1) + (-0.125812447286298 * d1^2.0); -- + (-0.101482158839039 * d1^3.0) + (0.000521691259383321 * d1^4.0);
+
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 150.0 THEN
+                    glofas_out := 150.0;
+                END IF;
+
+            ELSIF mcheck = 9 AND dcheck <= 10 THEN
+
+                --glofas_out :=((((exp(1.0)^5.7298)*(1+d1)^0.1463)) -1);
+                glofas_out := 429.896337933841 + (8.13490580107346 * d1) + (-0.0411663605258606 * d1^2);
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 150.0 THEN
+                    glofas_out := 150.0;
+                END IF;
+            ELSIF mcheck = 9 AND dcheck <= 20 AND dcheck > 10 THEN
+
+                --glofas_out := 210.1604 + (4.8564 * d1) + (-0.0127*d1^2.0);
+                glofas_out := 251.224074308337 + (7.26328204249139 * d1) + (-0.0269484938930255 * d1^2.0);
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 150.0 THEN
+                    glofas_out := 150.0;
+                END IF;
+
+            ELSIF mcheck = 9 AND dcheck <= 30 AND dcheck > 20 THEN
+
+                --glofas_out := ((((exp(1.0)^3.5805)*(1+d1)^0.4432)) -1);
+                glofas_out := 147.206288449766 + (1.39751077055147 * d1);
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 50.0 THEN
+                    glofas_out := 50.0;
+                END IF;
+            ELSIF mcheck = 10 THEN
+
+                --glofas_out := (0.9664 * d1);
+                glofas_out := 0.765786797838467 + (0.614425139921291 * d1);
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 0.0 THEN
+                    glofas_out := 0.0;
+                END IF;
+            ELSIF mcheck = 11 OR mcheck = 12 OR (mcheck >= 1 AND mcheck <= 5) THEN
+
+                glofas_out := (d1);
+
+                IF glofas_out > 2400.0 THEN
+                    glofas_out := 2400.0;
+                ELSIF glofas_out < 0.0 THEN
+                    glofas_out := 0.0;
+                END IF;
+            END IF;
+
+
+            RETURN NEXT;
+
+
+        END LOOP;
 
 
 END;
 $BODY$;
+

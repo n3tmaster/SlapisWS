@@ -1,6 +1,7 @@
 package it.cnr.ibimet.slapisws;
 
 import java.text.SimpleDateFormat;
+import java.util.logging.Logger;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -26,12 +27,13 @@ import it.lr.libs.DBManager;
  */
 @Path("/data")
 public class GetData extends Application implements SWH4EConst, ReclassConst{
-	
-	/**
+    static Logger logger = Logger.getLogger(String.valueOf(GetData.class));
+
+    /**
      * Get hydro station list + metadata
      *
-     *
-     * @return 
+     * @deprecated
+     * @return - JSON with station data
      */
     @GET
     @Path("/j_get_stations_data/{id_station}/{n_data}")
@@ -40,18 +42,18 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     								@PathParam("n_data") String n_data) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,"
             		+ "depth, battery from postgis.station_data where _id_station = "+id_station+" LIMIT "+n_data ;
 
-            System.out.println("J_GET_STATIONS_DATA - SQL: "+sqlString);
+            logger.info(sqlString);
 
             tdb.setPreparedStatementRef(sqlString);
             
@@ -75,30 +77,27 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
             }
 
             retData = jArray.toJSONString();
-            
-            
-            
-
-
 
 
         }catch(Exception e){
-            System.out.println("Error  : "+e.getMessage());
+            logger.warning(e.getMessage());
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
-                System.out.println("Error "+ee.getMessage());
+                logger.warning(ee.getMessage());
             }
 
             return Response.status(500).entity(e.getMessage()).build();
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
-                System.out.println("Error "+ee.getMessage());
+                logger.warning(ee.getMessage());
             }
 
         }
@@ -116,7 +115,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
      * Get hydro station list + metadata
      *
      *
-     * @return
+     * @return - JSON with station data
      */
     @GET
     @Path("/j_get_stations_data/json/{id_station}/{stat_name}/{year}")
@@ -126,17 +125,25 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
                                      @PathParam("year") String year) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
             SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
             SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
-            sqlString="select date_out, depth_out,q_out "
-                    + "from postgis.observed_data("+year+","+id_station+")";
 
+           // sqlString="select date_out, depth_out,q_out "
+//                    + "from postgis.extract_observed_data("+year+","+id_station+")";
+
+            sqlString =      "with dataout as " +
+                    "(select date_out, depth_out,q_out " +
+                    "from postgis.observed_data("+year+","+id_station+")) "+
+                    "select date_out, depth_out, q_out from dataout where depth_out is not null "+
+                    "union "+
+                    "select date_out, -999, -999 from dataout where depth_out is null " +
+                    "order by date_out desc ";
             System.out.println("J_GET_STATIONS_DATA - SQL: "+sqlString);
 
             tdb.setPreparedStatementRef(sqlString);
@@ -173,6 +180,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -182,6 +190,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -201,7 +210,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
      * Get hydro station list + metadata
      *
      *
-     * @return
+     * @return - TEXT plain with station data
      */
     @GET
     @Path("/j_get_stations_data/csv/{id_station}/{stat_name}/{year}")
@@ -211,16 +220,26 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
                                      @PathParam("year") String year) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
             SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
             SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
-            sqlString="select date_out, depth_out,q_out "
-                    + "from postgis.observed_data("+year+","+id_station+")";
+
+
+       //     sqlString="select date_out, depth_out,q_out "
+       //             + "from postgis.observed_data("+year+","+id_station+")";
+
+            sqlString =      "with dataout as " +
+                    "(select date_out, depth_out,q_out " +
+                    "from postgis.observed_data("+year+","+id_station+")) "+
+                    "select date_out, depth_out, q_out from dataout where depth_out is not null "+
+                    "union "+
+                    "select date_out, -999, -999 from dataout where depth_out is null " +
+                    "order by date_out desc ";
 
             System.out.println("J_GET_STATIONS_DATA - SQL: "+sqlString);
 
@@ -250,6 +269,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -259,6 +279,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -274,19 +295,25 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         return responseBuilder.build();
     }
 
+
+    /**
+     * @deprecated
+     * @param id_station - id station
+     * @return - JSON with station data
+     */
     @GET
     @Path("/j_get_stations_alldata/{id_station}")
     @Produces(MediaType.APPLICATION_JSON)
     public Response get_station_data(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,"
             		+ "depth, battery from postgis.station_data where _id_station = "+id_station+" ORDER BY dtime desc ";
@@ -327,6 +354,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -336,6 +364,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -358,13 +387,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     public Response get_opt_glofas_data(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
             SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
             SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select * from postgis.optimize_glofas_flat("+id_station+") ORDER BY dtime_out desc ";
 
@@ -412,6 +441,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -421,6 +451,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -436,13 +467,21 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         return responseBuilder.build();
     }
 
+
+    /**
+     * Export glofas data applying optimization model over Glofas outcomes version 3.0 or less and Glofas outcomes
+     * version 3.1 or newer with no applied optimization
+     * model
+     * @param id_station - station id
+     * @return - TEXT Plain with glofas data
+     */
     @GET
     @Path("/j_get_optimized_glofas_csv/{id_station}")
     @Produces(MediaType.TEXT_PLAIN)
-    public Response get_station_opt_glofas_csv(@PathParam("id_station") String id_station) {
+    public Response get_station_opt_glofas_csv(@PathParam("id_station") String id_station ) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
 
 
@@ -450,11 +489,20 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
             SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
             SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
-            sqlString="select * from postgis.optimize_glofas_flat("+id_station+") ORDER BY dtime_out desc ";
 
-            System.out.println("J_GET_STATIONS_DATA - SQL: "+sqlString);
+            sqlString="SELECT * FROM postgis.optimize_glofas_flat("+id_station+") "+
+                    "WHERE dtime_out < '2021-06-26'::timestamp "+
+                    "UNION "+
+                    "select dtime as dtime_out, d1 as d1_out, d2 as d2_out, d3 as d3_out, d4 as d4_out, "+
+                    "d5 as d5_out, d6 as d6_out, d7 as d7_out, d8 as d8_out , d9 as d9_out, d10 as d10_out "+
+                    "FROM postgis.glofas "+
+                    "WHERE dtime >= '2021-06-26'::timestamp and _id_station = "+id_station+" "+
+                    "ORDER BY dtime_out desc";
+
+
+            logger.info(sqlString);
 
             tdb.setPreparedStatementRef(sqlString);
 
@@ -475,35 +523,28 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
             }
 
-
-
-
-
-
-
         }catch(Exception e){
-            System.out.println("Error  : "+e.getMessage());
+            logger.warning(e.getMessage());
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
-                System.out.println("Error "+ee.getMessage());
+                logger.warning(ee.getMessage());
             }
 
             return Response.status(500).entity(e.getMessage()).build();
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
-                System.out.println("Error "+ee.getMessage());
+                logger.warning(ee.getMessage());
             }
 
         }
-
-
-
 
         Response.ResponseBuilder responseBuilder = Response.ok(retData);
         responseBuilder.header("Content-Disposition", "attachment; filename=\"opt_glofas_"+id_station+".csv\"");
@@ -512,14 +553,18 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         return responseBuilder.build();
     }
 
-
+    /**
+     * @deprecated
+     * @param id_station - id station
+     * @return - CSV with station data
+     */
     @GET
     @Path("/j_get_stations_alldata_csv/{id_station}")
     @Produces("text/csv")
     public Response get_station_data_csv(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
         
         
 
@@ -527,7 +572,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,"
             		+ "depth, battery from postgis.station_data where _id_station = "+id_station+" ORDER BY dtime desc ";
@@ -559,6 +604,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -568,6 +614,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -591,13 +638,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     public Response get_glofas_data(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,d12,d13,d14,d15,d16,d17,d18,d19,d20,d21,d22,d23,d24,d25,d26,d27,d28,d29,d30 from postgis.glofas where _id_station = "+id_station
@@ -668,6 +715,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -677,6 +725,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -691,21 +740,25 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         return responseBuilder.build();
     }
-	
-    
+
+    /**
+     * @deprecated
+     * @param id_station - id station
+     * @return - JSON with niger hyp rawdata
+     */
     @GET
     @Path("/j_get_niger_hyp_rawdata/{id_station}")
     @Produces(MediaType.APPLICATION_JSON)
     public Response get_niger_hyp_data(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,dtime2,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10 from postgis.niger_hyp_data where subbasin = '"+id_station+"'"
@@ -756,6 +809,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -765,6 +819,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -779,8 +834,15 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         return responseBuilder.build();
     }
-	
-    
+
+    /**
+     * @deprecated
+     * @param id_station - id station
+     * @param year - year
+     * @param month - month
+     * @param day - day
+     * @return - json with niger hyp rawdata
+     */
     @GET
     @Path("/j_get_niger_hyp_rawdata/{id_station}/{year}/{month}/{day}")
     @Produces(MediaType.APPLICATION_JSON)
@@ -790,13 +852,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     		@PathParam("day") String day) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,dtime2,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10 from postgis.niger_hyp_data where subbasin = '"+id_station+"'"
@@ -849,6 +911,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -858,6 +921,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -879,13 +943,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     public Response get_glofas_rawdata_csv(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,d12,d13,d14,d15,d16,d17,d18,d19,d20,d21,d22,d23,d24,d25,d26,d27,d28,d29,d30  from postgis.glofas where _id_station = "+id_station
@@ -925,6 +989,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -934,6 +999,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -949,6 +1015,12 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         return responseBuilder.build();
     }
 
+    /**
+     * Extract glofas data for given year and id station. apply Glofas 3.1 patch
+     * @param year
+     * @param id_station
+     * @return
+     */
     @GET
     @Path("/j_get_optimized_glofas_csv/{year}/{id_station}")
     @Produces(MediaType.TEXT_PLAIN)
@@ -956,27 +1028,62 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
                                              @PathParam("id_station") String id_station) {
 
         TDBManager tdb=null,  tdb2=null;
-        String retData="";
+        String retData;
         boolean first;
         try {
             SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
             SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             tdb2 = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+
+            String sqlString;
+            retData = "date, hour, d1,  d2,d3,d4,d5,d6,d7,d8,d9,d10\n";
+
+
+
+
+            sqlString="select dtime, d1, d2, d3, d4,d5,d6,d7,d8,d9,d10 from postgis.glofas where _id_station = "+id_station +" "
+                    + " AND extract(year from dtime) = " + year
+                    + " AND dtime >= '2021-06-26'::timestamp "
+                    + " ORDER BY dtime desc ";
+
+            logger.info(sqlString);
+
+            tdb.setPreparedStatementRef(sqlString);
+
+            tdb.runPreparedQuery();
+            while(tdb.next()){
+
+                retData = retData + "" +formatter.format(tdb.getData(1).getTime()) +"," + formatter2.format(tdb.getData(1).getTime())  + ",";
+
+                retData = retData + "," + tdb.getDouble(2)
+                        + "," + tdb.getDouble(3)
+                        + "," + tdb.getDouble(4)
+                        + "," + tdb.getDouble(5)
+                        + "," + tdb.getDouble(6)
+                        + "," + tdb.getDouble(7)
+                        + "," + tdb.getDouble(8)
+                        + "," + tdb.getDouble(9)
+                        + "," + tdb.getDouble(10)
+                        + "," + tdb.getDouble(11);
+
+                retData = retData + "\n";
+
+
+            }
 
             sqlString="select dtime from postgis.glofas where _id_station = "+id_station +" "
                     + " AND extract(year from dtime) = " + year
+                    + " AND dtime < '2021-06-26'::timestamp "
                     + " ORDER BY dtime desc ";
 
-            System.out.println("J_GET_STATIONS_DATA - SQL: "+sqlString);
+            logger.info(sqlString);
 
             tdb.setPreparedStatementRef(sqlString);
 
             tdb.runPreparedQuery();
 
             sqlString = "select * from optimize_glofas(?,?)";
-            retData = "date, hour, d1,  d2,d3,d4,d5,d6,d7,d8,d9,d10\n";
 
             tdb2.setPreparedStatementRef(sqlString);
             while(tdb.next()){
@@ -1002,39 +1109,37 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
 
-
-
-
-
-
-
         }catch(Exception e){
-            System.out.println("Error  : "+e.getMessage());
+            logger.warning("Error  : "+e.getMessage());
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
-                System.out.println("Error "+ee.getMessage());
+                logger.warning("Error "+ee.getMessage());
             }
             try{
+                assert tdb2 != null;
                 tdb2.closeConnection();
             }catch (Exception ee){
-                System.out.println("Error "+ee.getMessage());
+                logger.warning("Error "+ee.getMessage());
             }
             return Response.status(500).entity(e.getMessage()).build();
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
-                System.out.println("Error "+ee.getMessage());
+                logger.warning("Error "+ee.getMessage());
             }
 
             try{
+                assert tdb2 != null;
                 tdb2.closeConnection();
             }catch (Exception ee){
-                System.out.println("Error "+ee.getMessage());
+                logger.warning("Error "+ee.getMessage());
             }
 
         }
@@ -1054,14 +1159,14 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
                                              @PathParam("subbasin") String subbasin) {
 
         TDBManager tdb=null,  tdb2=null;
-        String retData="";
+        String retData;
         boolean first;
         try {
             SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
             SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
             tdb2 = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime from postgis.world_hype_data where subbasin = '"+subbasin +"' "
                     + " AND extract(year from dtime) = " + year
@@ -1111,11 +1216,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
             }
             try{
+                assert tdb2 != null;
                 tdb2.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1124,12 +1231,14 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
             }
 
             try{
+                assert tdb2 != null;
                 tdb2.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1146,19 +1255,24 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     }
 
 
+    /**
+     * @deprecated
+     * @param id_station - id station
+     * @return - CSV with niger hyp rawdata
+     */
     @GET
     @Path("/j_get_niger_hyp_rawdata_csv/{id_station}")
     @Produces(MediaType.TEXT_PLAIN)
     public Response get_niger_hyp_rawdata_csv(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,dtime2,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10 from postgis.niger_hyp_data where subbasin = '"+id_station+"'"
@@ -1196,6 +1310,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1205,6 +1320,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1219,8 +1335,15 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
         return responseBuilder.build();
     }
-	
-    
+
+    /**
+     * @deprecated
+     * @param id_station - id station
+     * @param year - year
+     * @param month - month
+     * @param day - day
+     * @return - niger hyp rawdata in csv version
+     */
     @GET
     @Path("/j_get_niger_hyp_rawdata_csv/{id_station}/{year}/{month}/{day}")
     @Produces(MediaType.TEXT_PLAIN)
@@ -1230,13 +1353,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     		@PathParam("day") String day) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,dtime2,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10 from postgis.niger_hyp_data where subbasin = '"+id_station+"' and dtime = '"+year+"-"+month+"-"+day+"'"
@@ -1276,6 +1399,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1285,6 +1409,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1308,13 +1433,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     public Response get_world_hype_data(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,dtime2,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10 from postgis.world_hype_data where subbasin = '"+id_station+"'"
@@ -1365,6 +1490,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1374,6 +1500,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1398,13 +1525,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     		@PathParam("day") String day) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,dtime2,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10 from postgis.world_hype_data where subbasin = '"+id_station+"'"
@@ -1457,6 +1584,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1466,6 +1594,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1488,13 +1617,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     public Response get_world_hype_rawdata_csv(@PathParam("id_station") String id_station) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,dtime2,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10 from postgis.world_hype_data where subbasin = '"+id_station+"'"
@@ -1532,6 +1661,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1541,6 +1671,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1566,13 +1697,13 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
     		@PathParam("day") String day) {
 
         TDBManager tdb=null;
-        String retData="";
+        String retData;
 
         try {
         	SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd");
         	SimpleDateFormat formatter2=new SimpleDateFormat("HH:mm");
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select dtime,dtime2,"
             		+ "d1,d2,d3,d4,d5,d6,d7,d8,d9,d10 from postgis.world_hype_data where subbasin = '"+id_station+"' and dtime = '"+year+"-"+month+"-"+day+"'"
@@ -1612,6 +1743,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -1621,6 +1753,7 @@ public class GetData extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());

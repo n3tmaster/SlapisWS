@@ -8,6 +8,7 @@ import java.io.InputStreamReader;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -32,7 +33,7 @@ import it.lr.libs.DBManager;
  */
 @Path("/vector")
 public class GetVector extends Application implements SWH4EConst, ReclassConst{
-	
+    static Logger logger = Logger.getLogger(String.valueOf(GetVector.class));
 	
 	/**
      * Get hydro station list
@@ -46,12 +47,12 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
     public Response get_polygon() {
 
         TDBManager tdb=null;
-        String imgOut="";
+        String imgOut;
 
         try {
 
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             sqlString="select st_astext(ST_Union(the_geom)) from postgis.stations" ;
 
@@ -84,6 +85,7 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
 
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -93,6 +95,7 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
         }finally {
 
             try{
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -112,22 +115,27 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
      * Get hydro station list + metadata
      *
      *
-     * @return 
+     * @return
      */
     @GET
-    @Path("/j_get_stations_geojson/")
+    @Path("/j_get_stations_geojson{basin:(/basin/.+?)?}")
     @Produces(MediaType.APPLICATION_JSON)
-    public Response get_poly_GeoJSON() {
+    public Response get_poly_GeoJSON(@PathParam("basin") String basin) {
 
         TDBManager tdb=null;
-        String imgOut="";
+        String imgOut;
 
         try {
 
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
+            System.out.println("GET_STATION_ River "+basin);
+            if(basin.matches("") || basin == null){
+                sqlString="select * from postgis.export_stations()" ;
+            }else{
+                sqlString="select * from postgis.export_stations('"+basin.split("/")[2]+"')" ;
+            }
 
-            sqlString="select * from postgis.export_stations()" ;
 
             System.out.println("J_GET_STATIONS_GEOJSON - SQL: "+sqlString);
 
@@ -193,12 +201,12 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
     public Response get_scenarios_JSON(@PathParam("lvl") String lvl) {
 
         TDBManager tdb=null;
-        String imgOut="";
-        String lvl_sql="";
+        String imgOut;
+        String lvl_sql;
         try {
 
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
             if(lvl.matches("") || lvl == null) {
             	sqlString="select * from postgis.export_all_scenarios()" ;
@@ -244,6 +252,7 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
 
             try{
             	System.out.println("J_GET_SCENARIOS - Closing connection...");
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -254,6 +263,7 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
 
             try{
             	System.out.println("J_GET_SCENARIOS - Closing connection...");
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -281,12 +291,12 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
     public Response get_layer_JSON(@PathParam("layer_name") String layer_name) {
 
         TDBManager tdb=null;
-        String imgOut="";
-        String lvl_sql="";
+        String imgOut;
+        String lvl_sql;
         try {
 
             tdb = new TDBManager("jdbc/ssdb");
-            String sqlString=null;
+            String sqlString;
 
            
             
@@ -328,6 +338,7 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
 
             try{
             	System.out.println("J_GET_LAYER - Closing connection...");
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -338,6 +349,7 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
 
             try{
             	System.out.println("J_GET_LAYER - Closing connection...");
+                assert tdb != null;
                 tdb.closeConnection();
             }catch (Exception ee){
                 System.out.println("Error "+ee.getMessage());
@@ -359,17 +371,15 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
     
     {
     	
-    	byte[] imgOut=null;
-    	double ref_value=0.0,minval=0.0,maxval=0.0;
-    	File fileout=null;
+
+    	File fileout;
     	List<Double> listQuantile;
     	try {
 	
-    		String legend;
-    		int id_ids;
-    		ProcessBuilder builder=null;
-    		ByteArrayOutputStream is;
-    		Process process=null;
+
+    		ProcessBuilder builder;
+
+    		Process process;
     		StreamGobbler streamGobbler;
     		
     		
@@ -435,13 +445,9 @@ public class GetVector extends Application implements SWH4EConst, ReclassConst{
 	
     	
     		return Response.status(500).entity(e.getMessage()).build();
-    	}finally {
-	
-    		
-	
     	}
 	
-    	Response.ResponseBuilder responseBuilder = Response.ok((Object)fileout);
+    	Response.ResponseBuilder responseBuilder = Response.ok(fileout);
     	responseBuilder.header("Content-Disposition", "attachment; filename=\""+layer_name+".zip\"");
     	
     	return responseBuilder.build();
